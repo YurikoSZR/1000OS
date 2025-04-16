@@ -1,3 +1,4 @@
-./graph/bin/
-./sort/bin/
-./tree/bin/
+./graph/bin/*
+./sort/bin/*
+./tree/bin/*
+.vscode

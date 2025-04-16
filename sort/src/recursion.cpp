@@ -64,5 +64,5 @@ void hanoi(int n,int from,int via,int to){
 
 
 int main(){
-    hanoi(3,11,22,33);
+    hanoi(11,11,22,33);
 }
