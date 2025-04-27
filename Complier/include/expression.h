@@ -12,7 +12,7 @@ struct stack_c{
         if(sp<32)data[++sp]=ch;
     }
 };
-
+void clean_buffer(char* buffer);
 int arithmetic_priority(char ch){
     switch(ch){
         case '*':
@@ -69,6 +69,7 @@ void Reg_to_postfix(char* infix,char* buffer){
                 stack.pop();
                 break;
             case '*':
+                if(stack.top()=='*')break;
                 buffer[sp++]=infix[ptr++];
                 break;
             case '.':
@@ -136,6 +137,13 @@ void arith_to_postfix(char* infix,char* buffer){
     }
     while(stack.sp>=0)
         buffer[sp++]=stack.pop();
+}
+
+void operation(char* reg,char* buffer){
+    char dot[32];
+    clean_buffer(dot);
+    add_dot(reg,dot);
+    Reg_to_postfix(dot,buffer);
 }
 
 void clean_buffer(char* buffer){
