@@ -112,17 +112,11 @@ NFA Reg2NFA(char* reg){
 }
 
 int main(){
-    char array[]="(a|b)*c";
+    char array[]="(abc*|d)*";
     char buffer[32];
     operation(array,buffer);
     NFA nfa=Reg2NFA(buffer);
-    int start;
-    for(int i=0;i<=sp_NFA;i++){
-        if(STATE[i].input==0){
-            start=i;
-            break;
-        }
-    }
+    int start=5;
     char test[]="ababc";
     for(int i=0;test[i];i++){
         if(STATE[start].count_edge==0)break;
