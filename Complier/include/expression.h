@@ -163,6 +163,12 @@ struct state_node {
     int count_edge = 0;
     edge edge_list[3];
     int input = 0;
+    int next_state(int i){
+        return edge_list[i].next;
+    }
+    char transition_char(int i){
+        return edge_list[i].ch;
+    }
 };
 
 struct NFA {
@@ -274,16 +280,50 @@ struct DFA{
     vector<edge> transition;
     vector<set<int>> STATE;
 };
-void get_closure_(char ch,NFA* nfa,int start,set<int>& closure,set<int>& complete){
+void get_closure_(NFA* nfa,int start,set<int>& closure,set<int>& complete){
     closure.insert(start);
     for(int i=0;i<3;i++){
-        if(nfa->STATE[start].edge_list[i].ch==ch){
+        if(nfa->STATE[start].edge_list[i].ch==EPS){
             closure.insert(nfa->STATE[start].edge_list[i].next);
             auto exist=complete.count(nfa->STATE[start].edge_list[i].next);
             if(exist== 0){
                 complete.insert(nfa->STATE[start].edge_list[i].next);
-                get_closure_(ch,nfa,nfa->STATE[start].edge_list[i].next,closure,complete);
+                get_closure_(nfa,nfa->STATE[start].edge_list[i].next,closure,complete);
             }
+        }
+    }
+}
+set<int> transition(NFA& nfa,set<int>& state,char ch){
+    set<int> result;
+    for(auto s:state){
+        for(int i=0;i<3;i++)
+        if(nfa.STATE[s].edge_list[i].ch==ch){
+            result.insert(nfa.STATE[s].edge_list[i].next);
+        }
+    }
+    return result;
+}
+
+set<int> set_closure(NFA& nfa,set<int>& state){
+    set<int> result;
+    set<int> complete;
+    for (int t : state){
+        get_closure_(&nfa,t,result,complete);
+    }
+    return result;
+}
+
+set<int> transition_closure(NFA& nfa,set<int>& state,char ch){
+    set<int> transit=transition(nfa,state,ch);
+    return set_closure(nfa,transit);
+}
+
+void print_nfa_states(NFA& nfa) {
+    for (int i = 0; i <= nfa.sp_NFA; ++i) {
+        std::cout << "State " << i << ":\n";
+        for (int j = 0; j < nfa.STATE[i].count_edge; ++j) {
+            std::cout << "  Transition on '" << nfa.STATE[i].transition_char(j) 
+                      << "' to State " << nfa.STATE[i].next_state(j) << "\n";
         }
     }
 }
