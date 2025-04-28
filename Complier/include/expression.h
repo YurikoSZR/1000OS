@@ -1,5 +1,9 @@
 #ifndef EXPRESSION
 #define EXPRESSION
+#define EPS '#'
+#include <set>
+#include <vector>
+using namespace std;
 struct stack_c{
     char data[32];
     int sp=-1;
@@ -37,6 +41,7 @@ int priority(char ch){
 
 void add_dot(char* reg,char* buffer){
     int sp=0;
+    A:
     while(*reg){
         switch(*reg){
             case '*':
@@ -47,7 +52,7 @@ void add_dot(char* reg,char* buffer){
                 reg++;break;
             default:
                 buffer[sp++]=*reg;
-                if(*(reg+1)!='*' && *(reg+1)!='|' && *(reg+1)!=')')
+                if(*(reg+1)!='*' && *(reg+1)!='|' && *(reg+1)!=')' && *(reg+1)!=0)
                     buffer[sp++]='.';
                 reg++;
         }
@@ -140,7 +145,7 @@ void arith_to_postfix(char* infix,char* buffer){
 }
 
 void operation(char* reg,char* buffer){
-    char dot[32];
+    char dot[128];
     clean_buffer(dot);
     add_dot(reg,dot);
     Reg_to_postfix(dot,buffer);
@@ -149,4 +154,138 @@ void operation(char* reg,char* buffer){
 void clean_buffer(char* buffer){
     for(int i=0;i<32;i++)buffer[i]=0;
 }
+struct edge {
+    char ch;
+    int next;
+};
+
+struct state_node {
+    int count_edge = 0;
+    edge edge_list[3];
+    int input = 0;
+};
+
+struct NFA {
+    int start = 0;
+    int end = 0;
+    int ptr = 0;
+    state_node STATE[64];  // Added state_node array
+    int sp_NFA = -1;      // Added stack pointer for state_node array
+    int index[32];       // Added index stack
+    int sp = -1;          // Added stack pointer for index stack
+};
+
+void add_edge(NFA* nfa, int src, int dst, char ch) {
+    nfa->STATE[src].edge_list[nfa->STATE[src].count_edge].ch = ch;
+    nfa->STATE[src].edge_list[nfa->STATE[src].count_edge].next = dst;
+    nfa->STATE[src].count_edge++;
+    nfa->STATE[dst].input += 1;
+}
+
+void delete_edge(NFA* nfa, int dst) {
+    nfa->STATE[dst].edge_list[nfa->STATE[dst].count_edge].ch = EPS;
+    nfa->STATE[dst].edge_list[nfa->STATE[dst].count_edge].next = 0;
+    nfa->STATE[dst].count_edge--;
+}
+
+int new_node(NFA* nfa) {
+    return ++nfa->sp_NFA;
+}
+
+void concatenate(NFA* nfa) {
+    int end = nfa->index[nfa->sp--];
+    int node_1 = nfa->index[nfa->sp--];
+    int node_2 = nfa->index[nfa->sp--];
+    int start = nfa->index[nfa->sp--];
+    add_edge(nfa, node_2, node_1, EPS);
+    nfa->index[++nfa->sp] = start;
+    nfa->index[++nfa->sp] = end;
+}
+
+void union_(NFA* nfa) {
+    int node_2 = nfa->index[nfa->sp--];
+    int node_1 = nfa->index[nfa->sp--];
+    int node_4 = nfa->index[nfa->sp--];
+    int node_3 = nfa->index[nfa->sp--];
+    int start = new_node(nfa);
+    int end = new_node(nfa);
+    add_edge(nfa, start, node_1, EPS);
+    add_edge(nfa, node_2, end, EPS);
+    add_edge(nfa, start, node_3, EPS);
+    add_edge(nfa, node_4, end, EPS);
+    nfa->index[++nfa->sp] = start;
+    nfa->index[++nfa->sp] = end;
+}
+
+void kleene_star(NFA* nfa) {
+    int node_1 = new_node(nfa);
+    int node_2 = new_node(nfa);
+    int end = nfa->index[nfa->sp--];
+    int start = nfa->index[nfa->sp--];
+    add_edge(nfa, node_1, start, EPS);
+    add_edge(nfa, end, node_2, EPS);
+    add_edge(nfa, end, start, EPS);
+    nfa->index[++nfa->sp] = node_1;
+    nfa->index[++nfa->sp] = node_2;
+}
+
+NFA Reg2NFA(char* reg) {
+    NFA nfa;
+    new_node(&nfa);
+    nfa.start = nfa.end = 0;
+    nfa.index[++(nfa.sp)] = nfa.start;
+    nfa.index[++(nfa.sp)] = nfa.end;
+    while (*reg) {
+        switch (*reg) {
+            case '*':
+                kleene_star(&nfa);
+                reg++;
+                break;
+            case '|':
+                union_(&nfa);
+                reg++;
+                break;
+            case '.':
+                concatenate(&nfa);
+                reg++;
+                break;
+            default:
+                nfa.ptr = nfa.index[nfa.sp];
+                int node = new_node(&nfa);
+                add_edge(&nfa, nfa.ptr, node, *reg);
+                nfa.index[++(nfa.sp)] = nfa.ptr;
+                nfa.index[++(nfa.sp)] = node;
+                reg++;
+        }
+        nfa.end = nfa.index[nfa.sp];
+    }
+    nfa.sp = -1;
+    for(int i=0;i<nfa.sp_NFA;i++){
+        if(nfa.STATE[i].input==0){
+            nfa.start=i;
+            break;
+        }
+    }
+    return nfa;
+}
+
+struct DFA{
+    int valid;
+    vector<edge> transition;
+    vector<set<int>> STATE;
+};
+void get_closure_(char ch,NFA* nfa,int start,set<int>& closure,set<int>& complete){
+    closure.insert(start);
+    for(int i=0;i<3;i++){
+        if(nfa->STATE[start].edge_list[i].ch==ch){
+            closure.insert(nfa->STATE[start].edge_list[i].next);
+            auto exist=complete.count(nfa->STATE[start].edge_list[i].next);
+            if(exist== 0){
+                complete.insert(nfa->STATE[start].edge_list[i].next);
+                get_closure_(ch,nfa,nfa->STATE[start].edge_list[i].next,closure,complete);
+            }
+        }
+    }
+}
+
 #endif
