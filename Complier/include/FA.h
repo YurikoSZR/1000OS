@@ -194,6 +194,7 @@ void kleene_star(NFA& nfa) {
     add_edge(nfa, node_1, start, EPS);
     add_edge(nfa, end, node_2, EPS);
     add_edge(nfa, end, start, EPS);
+    add_edge(nfa, start, end, EPS);
     nfa.index[++nfa.sp] = node_1;
     nfa.index[++nfa.sp] = node_2;
 }
