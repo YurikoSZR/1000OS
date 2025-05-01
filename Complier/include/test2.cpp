@@ -30,7 +30,7 @@ void process_regex(char* reg) {
   print_nfa_states(nfa);
   set<int> initial_closure;
   set<int> complete;
-  get_closure_(&nfa, nfa.start, initial_closure, complete);
+  get_closure_(nfa, nfa.start, initial_closure, complete);
 
   // Step 3: Calculate the transition state for character 'a' from the initial state's epsilon closure
   set<int> transition_a = transition_closure(nfa, initial_closure, 'a');
