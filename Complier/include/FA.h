@@ -70,7 +70,7 @@ string Reg_to_postfix(const string& infix) {
                 break;
             case '.':
             case '|': {
-                while (!stack.empty() && priority(stack.top()) >= priority(ch)) {
+                while (!stack.empty() && priority(stack.top()) > priority(ch)) {
                     buffer += stack.top();
                     stack.pop();
                 }
@@ -86,6 +86,9 @@ string Reg_to_postfix(const string& infix) {
         buffer += stack.top();
         stack.pop();
     }
+    for(int i=0; i<buffer.size(); ++i)
+        std::cout << buffer[i];
+    std::cout << std::endl;
     return buffer;
 }
 
@@ -136,7 +139,7 @@ struct edge {
 
 struct state_node {
     int count_edge = 0;
-    edge edge_list[3];
+    edge edge_list[4];
     int input = 0;
     int next_state(int i) { return edge_list[i].next; }
     char transition_char(int i) { return edge_list[i].ch; }
@@ -186,44 +189,71 @@ void union_(NFA& nfa) {
     nfa.index[++nfa.sp] = end;
 }
 
+void union__(NFA& nfa){
+    int node_2 = nfa.index[nfa.sp--];
+    int node_1 = nfa.index[nfa.sp--];
+    int node_4 = nfa.index[nfa.sp--];
+    int node_3 = nfa.index[nfa.sp--];
+    int NEW=new_node(nfa);
+    add_edge(nfa,node_1,node_3,EPS);
+    add_edge(nfa,node_2,NEW,EPS); 
+    add_edge(nfa,node_4,NEW,EPS);  
+    nfa.index[++nfa.sp] = node_1;
+    nfa.index[++nfa.sp] = NEW;
+}
+
 void kleene_star(NFA& nfa) {
-    int node_1 = new_node(nfa);
-    int node_2 = new_node(nfa);
     int end = nfa.index[nfa.sp--];
     int start = nfa.index[nfa.sp--];
-    add_edge(nfa, node_1, start, EPS);
-    add_edge(nfa, end, node_2, EPS);
     add_edge(nfa, end, start, EPS);
-    add_edge(nfa, start, end, EPS);
-    nfa.index[++nfa.sp] = node_1;
-    nfa.index[++nfa.sp] = node_2;
+    int newnode = new_node(nfa);
+    add_edge(nfa, newnode, start, EPS);
+    nfa.index[++nfa.sp] = newnode;
+    nfa.index[++nfa.sp] = end;
 }
 
 NFA Reg2NFA(const string& reg) {
     NFA nfa;
     new_node(nfa);
-    nfa.start = nfa.end = 0;
+    nfa.start =nfa.end= 0;
     nfa.index[++nfa.sp] = nfa.start;
     nfa.index[++nfa.sp] = nfa.end;
 
-    for (char ch : reg) {
+    for (int i =0 ; i < reg.size(); ++i) {
+        char ch = reg[i];
         switch (ch) {
             case '*':
                 kleene_star(nfa);
                 break;
             case '|':
-                union_(nfa);
+                union__(nfa); //union_(nfa);
                 break;
             case '.':
                 concatenate(nfa);
                 break;
             default: {
+                //获取 上一个结束状态
+              
+                if(reg[i+1]=='|'){
+                    int end = nfa.index[nfa.sp--];
+                    int START = nfa.index[nfa.sp--];
+                    int node = new_node(nfa);
+                    add_edge(nfa,START,node,ch);
+                    int TERMINAL=new_node(nfa);
+                    add_edge(nfa,node,TERMINAL,EPS);
+                    add_edge(nfa,end,TERMINAL,EPS);
+                    nfa.index[++nfa.sp] = START;
+                    nfa.index[++nfa.sp] = TERMINAL;
+                    i++;
+                }
+                else{
                 nfa.ptr = nfa.index[nfa.sp];
                 int node = new_node(nfa);
                 add_edge(nfa, nfa.ptr, node, ch);
                 nfa.index[++nfa.sp] = nfa.ptr;
                 nfa.index[++nfa.sp] = node;
                 break;
+                }
             }
         }
     }
@@ -239,12 +269,14 @@ NFA Reg2NFA(const string& reg) {
     return nfa;
 }
 
-struct DFA {
-    int valid;
-    vector<edge> transition;
-    vector<set<int>> STATE;
-};
-
+int get_terminal(const NFA& nfa){
+    for(int i=0; i<=nfa.sp_NFA; i++) {
+        if(nfa.STATE[i].count_edge == 0) {
+            return i;
+        }
+    }
+    return -1;
+}
 void get_closure_(const NFA& nfa, int start, set<int>& closure, set<int>& visited) {
     if (visited.count(start)) return;
     visited.insert(start);
@@ -359,7 +391,10 @@ struct DFA_class {
     set<set<int>> STATE;
     vector<vector<int>> transition_matrix;
     NFA nfa; // 保存用于生成DFA的NFA
-
+    std::vector<std::set<int>> state_list;  // 状态集合列表
+    set<int> initial_state;
+    int index_of_initial_state = -1;
+    set<set<int>> acceptable_states;
     DFA_class(const string& re) {
         string dotted = add_dot(re);
         string postfix = Reg_to_postfix(dotted);
@@ -368,6 +403,7 @@ struct DFA_class {
         nfa = Reg2NFA(postfix);
         cout << "\n=== NFA States ===";
         print_nfa_states(nfa);
+        int accept=get_terminal(nfa);
 
         // 生成字符集和DFA状态
         charset = get_charset_from_postfix(postfix);
@@ -384,6 +420,12 @@ struct DFA_class {
 
         // 构建转移矩阵
         build_transition_matrix();
+        cout<<endl;
+        std::cout<<"Inital State:"<<index_of_initial_state<<endl;
+       for(auto& s:STATE){
+          if(s.count(accept))
+          acceptable_states.insert(s);
+       }
     }
 
     void print_transition_matrix() {
@@ -441,6 +483,7 @@ static void print_nfa_states(const NFA& nfa) {
 
         set<set<int>> dfa_states;
         set<set<int>> worklist;
+        this->initial_state = initial;
         dfa_states.insert(initial);
         worklist.insert(initial);
 
@@ -482,8 +525,23 @@ static void print_nfa_states(const NFA& nfa) {
                 }
             }
         }
+        for(auto &s: state_list){
+            if( s == initial_state){
+            index_of_initial_state = state_index.at(s);
+            break;
+            }
+        }
     }
-
-
 };
+
+
+void run_regex_test(const string& regex) {
+    cout << "══════════════════════════════" << endl;
+    cout << "Testing Regex: " << regex << endl;
+    
+    DFA_class dfa(regex);
+    dfa.print_transition_matrix();
+    
+    cout << "══════════════════════════════" << endl << endl;
+}
 #endif

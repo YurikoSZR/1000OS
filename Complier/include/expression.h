@@ -80,7 +80,7 @@ void Reg_to_postfix(char* infix,char* buffer){
             case '.':
             case '|':
             if(stack.sp>=0 ){
-                if(priority(stack.top())>=priority(infix[ptr])){
+                if(priority(stack.top())>priority(infix[ptr])){
                     buffer[sp++]=stack.pop();
                     stack.push(infix[ptr++]);
                 }
