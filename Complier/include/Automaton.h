@@ -165,13 +165,13 @@ int new_node(NFA& nfa) {
 }
 
 void concatenate(NFA& nfa) {
-    int end = nfa.index[nfa.sp--];
-    int node_1 = nfa.index[nfa.sp--];
+    int node_4= nfa.index[nfa.sp--];
+    int node_3 = nfa.index[nfa.sp--];
     int node_2 = nfa.index[nfa.sp--];
-    int start = nfa.index[nfa.sp--];
-    add_edge(nfa, node_2, node_1, EPS);
-    nfa.index[++nfa.sp] = start;
-    nfa.index[++nfa.sp] = end;
+    int node_1= nfa.index[nfa.sp--];
+    add_edge(nfa,node_2,node_3,EPS);
+    nfa.index[++nfa.sp] = node_1;
+    nfa.index[++nfa.sp] = node_4;
 }
 
 void union_(NFA& nfa) {
@@ -194,12 +194,14 @@ void union__(NFA& nfa){
     int node_1 = nfa.index[nfa.sp--];
     int node_4 = nfa.index[nfa.sp--];
     int node_3 = nfa.index[nfa.sp--];
-    int NEW=new_node(nfa);
-    add_edge(nfa,node_1,node_3,EPS);
-    add_edge(nfa,node_2,NEW,EPS); 
-    add_edge(nfa,node_4,NEW,EPS);  
-    nfa.index[++nfa.sp] = node_1;
-    nfa.index[++nfa.sp] = NEW;
+    int START= new_node(nfa);
+    int END= new_node(nfa);
+    add_edge(nfa, START, node_1, EPS);
+    add_edge(nfa, node_2, END, EPS);
+    add_edge(nfa, START, node_3, EPS);
+    add_edge(nfa, node_4, END, EPS);
+    nfa.index[++nfa.sp] = START;
+    nfa.index[++nfa.sp] = END;
 }
 
 void kleene_star(NFA& nfa) {
@@ -214,55 +216,30 @@ void kleene_star(NFA& nfa) {
 
 NFA Reg2NFA(const string& reg) {
     NFA nfa;
-    new_node(nfa);
-    nfa.start =nfa.end= 0;
-    nfa.index[++nfa.sp] = nfa.start;
-    nfa.index[++nfa.sp] = nfa.end;
-
-    for (int i =0 ; i < reg.size(); ++i) {
-        char ch = reg[i];
-        switch (ch) {
+    for (char ch : reg) {
+        switch(ch){
             case '*':
                 kleene_star(nfa);
-                break;
-            case '|':
-                union__(nfa); //union_(nfa);
                 break;
             case '.':
                 concatenate(nfa);
                 break;
-            default: {
-                //获取 上一个结束状态
-              
-                if(reg[i+1]=='|'){
-                    int end = nfa.index[nfa.sp--];
-                    int START = nfa.index[nfa.sp--];
-                    int node = new_node(nfa);
-                    add_edge(nfa,START,node,ch);
-                    int TERMINAL=new_node(nfa);
-                    add_edge(nfa,node,TERMINAL,EPS);
-                    add_edge(nfa,end,TERMINAL,EPS);
-                    nfa.index[++nfa.sp] = START;
-                    nfa.index[++nfa.sp] = TERMINAL;
-                    i++;
-                }
-                else{
-                nfa.ptr = nfa.index[nfa.sp];
-                int node = new_node(nfa);
-                add_edge(nfa, nfa.ptr, node, ch);
-                nfa.index[++nfa.sp] = nfa.ptr;
-                nfa.index[++nfa.sp] = node;
+            case '|':
+                union__(nfa);
                 break;
-                }
-            }
+            default:
+                int node_1 = new_node(nfa);
+                int node_2 = new_node(nfa);
+                add_edge(nfa,node_1, node_2,ch);
+                nfa.index[++nfa.sp] = node_1;
+                nfa.index[++nfa.sp] = node_2;
         }
     }
-
     nfa.end = nfa.index[nfa.sp];
     nfa.sp = -1;
-    for(int i=0; i<=nfa.sp_NFA; i++) {
-        if(nfa.STATE[i].input == 0) {
-            nfa.start = i;
+    for(int i=0;i<nfa.sp_NFA;i++){
+        if(nfa.STATE[i].input==0){
+            nfa.start=i;
             break;
         }
     }
@@ -389,12 +366,12 @@ string set_to_string(const set<int>& s) {
 struct DFA_class {
     set<char> charset;
     set<set<int>> STATE;
-    vector<vector<int>> transition_matrix;
+    vector<vector<int>> transition_matrix; 
+    vector<int> Accept;
     NFA nfa; // 保存用于生成DFA的NFA
-    std::vector<std::set<int>> state_list;  // 状态集合列表
+    vector<set<int>> state_list;  // 状态集合列表
     set<int> initial_state;
     int index_of_initial_state = -1;
-    set<set<int>> acceptable_states;
     DFA_class(const string& re) {
         string dotted = add_dot(re);
         string postfix = Reg_to_postfix(dotted);
@@ -420,14 +397,26 @@ struct DFA_class {
 
         // 构建转移矩阵
         build_transition_matrix();
+                // 初始化接受状态 (新增代码)
+        int index=0;
+        for(auto s : STATE){
+            if(s.count(nfa.end))
+                Accept.push_back(index);
+            index++;
+        }
         cout<<endl;
         std::cout<<"Inital State:"<<index_of_initial_state<<endl;
-       for(auto& s:STATE){
-          if(s.count(accept))
-          acceptable_states.insert(s);
-       }
     }
 
+    int translate_ch(char ch){
+        int count=0;
+        for(auto it:charset){
+            if(it==ch)
+                return count;
+            count++;
+        }
+        return -1;
+    }
     void print_transition_matrix() {
         vector<char> char_list(charset.begin(), charset.end());
         // set默认有序，无需排序
@@ -447,6 +436,25 @@ struct DFA_class {
             }
             cout << "]" << endl;
         }
+    }
+
+    int get_next(int state,char ch){
+        int index=translate_ch(ch);
+        return index;
+    }
+    bool pattern(const string& str){
+        int state=index_of_initial_state;
+        for(char ch:str){
+            int transe = get_next(state,ch);
+            if(transe == -1)break;
+            state=transition_matrix[state][transe];
+
+        }
+        for(auto& i:Accept){
+            if(i==state)
+                return true;
+        }
+        return false;
     }
 private:
 static void print_nfa_states(const NFA& nfa) {
@@ -507,7 +515,9 @@ static void print_nfa_states(const NFA& nfa) {
 
     void build_transition_matrix() {
         vector<set<int>> state_list(STATE.begin(), STATE.end());
+        state_list = vector<set<int>>(STATE.begin(), STATE.end());        
         map<set<int>, int> state_index;
+
         for (int i = 0; i < state_list.size(); ++i) {
             state_index[state_list[i]] = i;
         }
