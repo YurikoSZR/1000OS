@@ -3,7 +3,7 @@
 #include <string>
 
 int main() {
-    std::string text = "联系邮箱：user@example.com，电话：123-456-7890";
+    std::string text = "联系邮箱:user@example.com,电话:123-456-7890";
     
     // 匹配邮箱
     std::regex emailRegex(R"((\w+)@(\w+\.\w+))");
@@ -18,6 +18,5 @@ int main() {
     for (auto it = numBegin; it != std::sregex_iterator(); ++it) {
         std::cout << "数字：" << it->str() << std::endl;
     }
-
     return 0;
 }

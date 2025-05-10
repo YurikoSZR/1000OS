@@ -3,7 +3,7 @@ int max(int a,int b){
     return a>b?a:b;
 }
 
-typedef struct{
+typedef struct node{
     int data;
     int height;
     struct node *left, *right;
@@ -17,18 +17,18 @@ typedef struct{
             return 1;
     }
     int Lheight(){
-        return index->left==NULL?0:index->left->height;
+        return this->left==NULL?0:this->left->height;
     }
     int Rheight(){
-        return index->right==NULL?0:index->right->height;
+        return this->right==NULL?0:this->right->height;
     } 
 }node;
 
 class avltree{
     private:
     node* _insert(node* ptr,node* index){
-        if(ptr->data== index->data)return index;
         if(index == NULL)return index;
+        if(ptr->data== index->data)return index;
         if(ptr->data > index->data){
             index->right = _insert(ptr->right,index);
             return keepBalance(index);
@@ -51,10 +51,9 @@ class avltree{
 
     void insert(int data){
         node* NEW= new node(data);
-        _insert(NEW,root);
+        root=_insert(NEW,root);
     }
 };
-
 
 node* avltree::LRotate(node * index){
     if(index == root)root = index->right;
@@ -89,4 +88,22 @@ node* avltree::keepBalance(node * index){
             index->right = RRotate(index->right);
         return LRotate(index);
     }
+}
+
+void print(node* root){
+    if(root == NULL)return;
+    print(root->left);
+    print(root->right);
+    std::cout<<root->data<<" ";
+}
+
+
+int main(){
+    avltree tree;
+    tree.insert(1);
+    tree.insert(2);
+    tree.insert(3);
+    tree.insert(4);
+    tree.insert(5);
+    print(tree.root);
 }

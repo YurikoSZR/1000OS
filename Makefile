@@ -3,7 +3,7 @@ CXX := g++
 CXXFLAGS := -I./include -Wall -Wextra -g
 
 # 定义模块目录
-MODULES := tree sort graph
+MODULES := tree sort graph leetcode
 
 # 自动获取所有目标文件（各模块bin目录下的可执行文件）
 TARGETS := $(foreach mod,$(MODULES),\

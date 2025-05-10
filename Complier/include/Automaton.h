@@ -8,6 +8,7 @@
 #include <map>
 #include <iostream>
 #include <algorithm>
+#include <assert.h>
 using namespace std;
 
 int arithmetic_priority(char ch) {
@@ -132,8 +133,17 @@ string arith_to_postfix(const string& infix) {
     return buffer;
 }
 
+enum CHARACTER{
+	character,
+	SCOPE
+};
+
 struct edge {
-    char ch;
+    
+    union{
+    	char ch;
+	int scope[2];
+    };
     int next;
 };
 
@@ -445,10 +455,12 @@ struct DFA_class {
     bool pattern(const string& str){
         int state=index_of_initial_state;
         for(char ch:str){
+            
             int transe = get_next(state,ch);
             if(transe == -1)break;
+            if(transition_matrix[state][transe]==-1)break;
             state=transition_matrix[state][transe];
-
+            assert(state!=-1);
         }
         for(auto& i:Accept){
             if(i==state)
@@ -543,7 +555,6 @@ static void print_nfa_states(const NFA& nfa) {
         }
     }
 };
-
 
 void run_regex_test(const string& regex) {
     cout << "══════════════════════════════" << endl;
