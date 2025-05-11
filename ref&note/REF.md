@@ -244,4 +244,11 @@ struct trapframe {
   /* 280 */ uint64 t6;
 };
 ````
+##### RISCV中与锁相关的 Atomic
+````
+type __sync_lock_test_and_set(type *ptr, type value);
+````
+将目标ptr设置为新值并返回旧值：
+若旧值为1，进程未获得锁，新值为1，进程等待
+若旧值为0，锁未被占用，新值为1，进程获得锁
 
