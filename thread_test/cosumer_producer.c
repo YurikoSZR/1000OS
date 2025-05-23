@@ -22,7 +22,6 @@ shared_buffer sb = { {0}, 0, 0, 0, 0 };
 /* 内联汇编阅读：
     3f: 向下读取标签3
     2b 1b:向上读取标签2，标签1
-
 */
 void spin_lock(int *lock) {
     asm volatile (

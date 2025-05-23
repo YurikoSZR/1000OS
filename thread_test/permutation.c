@@ -99,7 +99,7 @@ void* thread_func(void *arg) {
 }
 
 int main() {
-    int elements[] = {1, 2, 3, 4, 5, 6, 7, 8}; // 示例输入
+    int elements[] = {1, 2, 3, 4, 5, 6, 7, 8,9,10}; // 示例输入
     int n = sizeof(elements)/sizeof(elements[0]);
 
     // 初始化共享数据

@@ -11,7 +11,7 @@ struct sbiret {
         while (1) {}                                                           \
     } while (0)
 
-    #include "common.h"
+#include "common.h"
 
 struct trap_frame {
         uint32_t ra;
@@ -59,3 +59,14 @@ do {                                                                       \
     uint32_t __tmp = (value);                                              \
     __asm__ __volatile__("csrw " #reg ", %0" ::"r"(__tmp));                \
 } while (0)
+
+#define SATP_SV32 (1u << 31)
+#define PAGE_V    (1 << 0)   // "Valid" 位（表项已启用）
+#define PAGE_R    (1 << 1)   // 可读
+#define PAGE_W    (1 << 2)   // 可写
+#define PAGE_X    (1 << 3)   // 可执行
+#define PAGE_U    (1 << 4)   // 用户（用户模式可访问）
+
+#define USER_BASE 0x1000000
+#define SSTATUS_SPIE (1 << 5)
+#define SCAUSE_ECALL 8

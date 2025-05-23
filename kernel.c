@@ -4,12 +4,16 @@ typedef unsigned char uint8_t;
 typedef unsigned int uint32_t;
 typedef uint32_t size_t;
 extern char __bss[],__bss_end[],__stack_top[],__free_ram[], __free_ram_end[];
+extern char __kernel_base[];
+
+extern char _binary_shell_bin_start[], _binary_shell_bin_size[] , _binary_shell_bin_end;
 
 void *memset(void *buf, char c, size_t n);
 void handle_trap(struct trap_frame *f);
 void kernel_entry(void);
 paddr_t alloc_pages(uint32_t n);
 void putchar(char ch);
+void handle_syscall(struct trap_frame *f);
 
 /*
 
@@ -25,8 +29,31 @@ struct process {
     int pid;             // 进程 ID
     int state;           // 进程状态: PROC_UNUSED 或 PROC_RUNNABLE
     vaddr_t sp;          // 栈指针
+    uint32_t *page_table;
     uint8_t stack[8192]; // 内核栈
 };
+
+void map_page(uint32_t *table1, uint32_t vaddr, paddr_t paddr, uint32_t flags) {
+    if (!is_aligned(vaddr, PAGE_SIZE))
+        PANIC("unaligned vaddr %x", vaddr);
+
+    if (!is_aligned(paddr, PAGE_SIZE))
+        PANIC("unaligned paddr %x", paddr);
+
+    uint32_t vpn1 = (vaddr >> 22) & 0x3ff;
+    if ((table1[vpn1] & PAGE_V) == 0) {
+        // 如果一级页表项不存在，则创建二级页表。
+        uint32_t pt_paddr = alloc_pages(1);
+        table1[vpn1] = ((pt_paddr / PAGE_SIZE) << 10) | PAGE_V;
+    }
+
+    // 设置二级页表项以映射物理页面。
+    uint32_t vpn0 = (vaddr >> 12) & 0x3ff;
+    uint32_t *table0 = (uint32_t *) ((table1[vpn1] >> 10) * PAGE_SIZE);
+    table0[vpn0] = ((paddr / PAGE_SIZE) << 10) | flags | PAGE_V;
+}
+
+
 
 __attribute__((naked)) void switch_context(uint32_t *prev_sp,
     uint32_t *next_sp) {
@@ -72,7 +99,18 @@ __asm__ __volatile__(
 
 struct process procs[PROCS_MAX]; // 所有进程控制结构
 
-struct process *create_process(uint32_t pc) {
+// ↓ __attribute__((naked)) 非常重要!
+__attribute__((naked)) void user_entry(void) {
+    __asm__ __volatile__(
+        "csrw sepc, %[sepc]        \n"
+        "csrw sstatus, %[sstatus]  \n"
+        "sret                      \n"
+        :
+        : [sepc] "r" (USER_BASE),
+          [sstatus] "r" (SSTATUS_SPIE)
+    );
+}
+struct process *create_process(const void *image, size_t image_size) {
     // 查找未使用的进程控制结构
     struct process *proc = NULL;
     int i;
@@ -101,16 +139,34 @@ struct process *create_process(uint32_t pc) {
     *--sp = 0;                      // s2
     *--sp = 0;                      // s1
     *--sp = 0;                      // s0
-    *--sp = (uint32_t) pc;          // ra
+    *--sp = (uint32_t) user_entry;          // ra
+
+    // 映射内核页面。
+    uint32_t *page_table = (uint32_t *) alloc_pages(1);
+    for (paddr_t paddr = (paddr_t) __kernel_base;paddr < (paddr_t) __free_ram_end; paddr += PAGE_SIZE)
+    map_page(page_table, paddr, paddr, PAGE_R | PAGE_W | PAGE_X);
+
+    for (uint32_t off = 0; off < image_size; off += PAGE_SIZE) {
+        paddr_t page = alloc_pages(1);
+
+        // 处理要复制的数据小于页面大小的情况。
+        size_t remaining = image_size - off;
+        size_t copy_size = PAGE_SIZE <= remaining ? PAGE_SIZE : remaining;
+
+        // 填充并映射页面。
+        memcpy((void *) page, image + off, copy_size);
+        map_page(page_table, USER_BASE + off, page,
+                 PAGE_U | PAGE_R | PAGE_W | PAGE_X);
+    }
+
 
     // 初始化字段
     proc->pid = i + 1;
     proc->state = PROC_RUNNABLE;
+    proc->page_table = page_table;
     proc->sp = (uint32_t) sp;
     return proc;
 }
-
-
 
 
 void delay(void) {
@@ -131,13 +187,43 @@ void hanoi(int n,int from,int via,int to){
 struct process *proc_a;
 struct process *proc_b;
 
+struct process *current_proc; // 当前运行的进程
+struct process *idle_proc;    // 空闲进程
+void yield(void) {
+    // 搜索可运行的进程
+    struct process *next = idle_proc;
+    for (int i = 0; i < PROCS_MAX; i++) {
+        struct process *proc = &procs[(current_proc->pid + i) % PROCS_MAX];
+        if (proc->state == PROC_RUNNABLE && proc->pid > 0) {
+            next = proc;
+            break;
+        }
+    }
+
+    // 如果除了当前进程外没有可运行的进程，返回并继续处理
+    if (next == current_proc)
+        return;
+
+    // 上下文切换
+    __asm__ __volatile__(
+        "sfence.vma\n"
+        "csrw satp, %[satp]\n"
+        "sfence.vma\n"
+        "csrw sscratch, %[sscratch]\n"
+        :
+        :   [satp] "r" (SATP_SV32 | ((uint32_t) next->page_table / PAGE_SIZE)),
+            [sscratch] "r" ((uint32_t) &next->stack[sizeof(next->stack)])
+    );
+    struct process *prev = current_proc;
+    current_proc = next;
+    switch_context(&prev->sp, &next->sp);
+}
 void proc_a_entry(void) {
     printf("starting process A\n");
     while (1) {
         putchar('A');
-        hanoi(3,1,2,3);
-        switch_context(&proc_a->sp, &proc_b->sp);
         delay();
+        yield();
     }
 }
 
@@ -145,15 +231,10 @@ void proc_b_entry(void) {
     printf("starting process B\n");
     while (1) {
         putchar('B');
-        hanoi(4,7,8,9);
-        switch_context(&proc_b->sp, &proc_a->sp);
         delay();
+        yield();
     }
 }
-
-
-
-
 
 //fid:function id   eid:extension id
 struct sbiret sbi_call(long arg0, long arg1, long arg2, long arg3, long arg4,
@@ -182,15 +263,20 @@ sbi_call(ch, 0, 0, 0, 0, 0, 0, 1 /* Console Putchar */);
 void kernel_main(void) {
     memset(__bss, 0, (size_t) __bss_end - (size_t) __bss);
 
+    printf("\n\n");
+
     WRITE_CSR(stvec, (uint32_t) kernel_entry);
 
-    proc_a = create_process((uint32_t) proc_a_entry);
-    proc_b = create_process((uint32_t) proc_b_entry);
-    proc_a_entry();
+    idle_proc = create_process(NULL, 0); // 已更新!
+    idle_proc->pid = 0; // idle
+    current_proc = idle_proc;
 
-    PANIC("unreachable here!");
+    // 新增!
+    create_process(_binary_shell_bin_start, (size_t) _binary_shell_bin_size);
+
+    yield();
+    PANIC("switched to idle process");
 }
-
 __attribute__((section(".text.boot")))
 __attribute__((naked))
 void boot(void){
@@ -206,8 +292,24 @@ void handle_trap(struct trap_frame *f) {
     uint32_t scause = READ_CSR(scause);
     uint32_t stval = READ_CSR(stval);
     uint32_t user_pc = READ_CSR(sepc);
+    if (scause == SCAUSE_ECALL) {
+        handle_syscall(f);
+        user_pc += 4;
+    } else {
+        PANIC("unexpected trap scause=%x, stval=%x, sepc=%x\n", scause, stval, user_pc);
+    }
 
-    PANIC("unexpected trap scause=%x, stval=%x, sepc=%x\n", scause, stval, user_pc);
+    WRITE_CSR(sepc, user_pc);
+}
+
+void handle_syscall(struct trap_frame *f) {
+    switch (f->a3) {
+        case SYS_PUTCHAR:
+            putchar(f->a0);
+            break;
+        default:
+            PANIC("unexpected syscall a3=%x\n", f->a3);
+    }
 }
 
 __attribute__((naked))
